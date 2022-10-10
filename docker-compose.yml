@@ -408,6 +408,31 @@ services:
       - "traefik.http.routers.plex-rtr.service=plex-svc"
       - "traefik.http.services.plex-svc.loadbalancer.server.port=32400"
 
+  kitana:
+    <<: *common-keys-media
+    image: lscr.io/linuxserver/kitana:latest
+    container_name: kitana
+    networks:
+      - t2_proxy
+    ports:
+      - "31337:31337"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/kitana:/config
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.kitana-rtr.entrypoints=https"
+      - "traefik.http.routers.kitana-rtr.rule=Host(`kitana.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.kitana-rtr.middlewares=chain-oauth@file"
+      #- "traefik.http.routers.kitana-rtr.middlewares=chain-oauth-ext@file"
+      ## HTTP Services
+      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
+      - "traefik.http.services.ombi-svc.loadbalancer.server.port=31337"
+
   ombi:
     <<: *common-keys-media
     image: lscr.io/linuxserver/ombi:latest
