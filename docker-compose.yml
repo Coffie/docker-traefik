@@ -407,6 +407,10 @@ services:
       <<: *default-tz-puid-pgid
     labels:
       - "traefik.enable=true"
+      - traefik.http.middlewares.ombi-rtr.headers.SSLRedirect=true
+      - traefik.http.middlewares.ombi-rtr.headers.STSSeconds=315360000
+      - traefik.http.middlewares.ombi-rtr.headers.browserXSSFilter=true
+      - traefik.http.middlewares.ombi-rtr.headers.contentTypeNosniff=true
       ## HTTP Routers Auth
       - "traefik.http.routers.ombi-rtr.entrypoints=https"
       - "traefik.http.routers.ombi-rtr.rule=Host(`ombi.$DOMAINNAME_HOME_SERVER`)"
