@@ -535,6 +535,8 @@ services:
     <<: *common-keys-core # See EXTENSION FIELDS at the top
     image: louislam/uptime-kuma
     container_name: uptime-kuma
+    ports:
+      - "$KUMA_PORT:3001"
     volumes:
       - $DOCKERDIR/appdata/uptime-kuma:/app/data
     labels:
