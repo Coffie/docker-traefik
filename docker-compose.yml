@@ -407,10 +407,15 @@ services:
       <<: *default-tz-puid-pgid
     labels:
       - "traefik.enable=true"
+      - traefik.docker.network=t2_proxy
       - traefik.http.middlewares.ombi-rtr.headers.SSLRedirect=true
       - traefik.http.middlewares.ombi-rtr.headers.STSSeconds=315360000
       - traefik.http.middlewares.ombi-rtr.headers.browserXSSFilter=true
       - traefik.http.middlewares.ombi-rtr.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.ombi-rtr.headers.SSLHost=
+      - traefik.http.middlewares.ombi-rtr.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.ombi-rtr.headers.STSPreload=true
+      - traefik.http.middlewares.ombi-rtr.headers.frameDeny=true
       ## HTTP Routers Auth
       - "traefik.http.routers.ombi-rtr.entrypoints=https"
       - "traefik.http.routers.ombi-rtr.rule=Host(`ombi.$DOMAINNAME_HOME_SERVER`)"
