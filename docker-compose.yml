@@ -197,7 +197,7 @@ services:
       - "$NZBGET_PORT:6789"
     volumes:
       - $DOCKERDIR/appdata/nzbget:/config
-      - $STORAGEDIR/data/downloads:/data/downloads
+      - $STORAGEDIR/data/usenet:/data/usenet
     environment:
       <<: *default-tz-puid-pgid
     labels:
@@ -207,7 +207,7 @@ services:
       # BYPASS IS NOT WORKING YET. NEED TO FIGURE THIS OUT.
       - "traefik.http.routers.nzbget-rtr-bypass.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
       #- "traefik.http.routers.nzbget-rtr-bypass.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`) && Query(`apikey`, `$NZBGET_API_KEY`)"
-      - "traefik.http.routers.nzbget-rtr-bypass.priority=100"
+      - "traefik.http.routers.nzbget-rtr-bypass.priority=50"
       ## HTTP Routers Auth
       - "traefik.http.routers.nzbget-rtr.entrypoints=https"
       - "traefik.http.routers.nzbget-rtr.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
