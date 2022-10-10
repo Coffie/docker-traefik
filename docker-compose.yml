@@ -188,6 +188,40 @@ services:
       ## HTTP Services
       - "traefik.http.routers.transmission-rtr.service=transmission-svc"
       - "traefik.http.services.transmission-svc.loadbalancer.server.port=9091"
+  # nzbget - Binary newsgrabber (NZB downloader)
+  nzbget:
+    <<: *common-keys-apps # See EXTENSION FIELDS at the top
+    image: lscr.io/linuxserver/nzbget
+    container_name: nzbget
+    networks:
+      t2_proxy:
+        ipv4_address: 192.168.90.216
+    ports:
+      - "$NZBGET_PORT:6789"
+    volumes:
+      - $DOCKERDIR/appdata/nzbget:/config
+      - $STORAGEDIR/data/downloads:/data/downloads
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth Bypass
+      - "traefik.http.routers.nzbget-rtr-bypass.entrypoints=https"
+      # BYPASS IS NOT WORKING YET. NEED TO FIGURE THIS OUT.
+      - "traefik.http.routers.nzbget-rtr-bypass.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
+      #- "traefik.http.routers.nzbget-rtr-bypass.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`) && Query(`apikey`, `$NZBGET_API_KEY`)"
+      - "traefik.http.routers.nzbget-rtr-bypass.priority=100"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.nzbget-rtr.entrypoints=https"
+      - "traefik.http.routers.nzbget-rtr.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.nzbget-rtr.priority=99"
+      ## Middlewares
+      - "traefik.http.routers.nzbget-rtr-bypass.middlewares=chain-no-auth@file"
+      - "traefik.http.routers.nzbget-rtr.middlewares=chain-no-auth@file"
+      ## HTTP Services
+      - "traefik.http.routers.nzbget-rtr.service=nzbget-svc"
+      - "traefik.http.routers.nzbget-rtr-bypass.service=nzbget-svc"
+      - "traefik.http.services.nzbget-svc.loadbalancer.server.port=6789"
 
         # transmission-openvpn:
         #   <<: *common-keys-apps
