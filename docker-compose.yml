@@ -193,9 +193,6 @@ services:
     <<: *common-keys-apps # See EXTENSION FIELDS at the top
     image: lscr.io/linuxserver/nzbget
     container_name: nzbget
-    networks:
-      t2_proxy:
-        ipv4_address: 192.168.90.216
     ports:
       - "$NZBGET_PORT:6789"
     volumes:
