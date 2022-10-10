@@ -396,7 +396,7 @@ services:
 
   radarr:
     <<: *common-keys-media
-    image: lscr.io/linuxserver/radarr:nightly
+    image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     ports:
       - "$RADARR_PORT:7878"
