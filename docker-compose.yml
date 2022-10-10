@@ -434,7 +434,7 @@ services:
       - traefik.http.middlewares.ombi-rtr.headers.frameDeny=true
       ## HTTP Routers Auth
       - "traefik.http.routers.ombi-rtr.entrypoints=https"
-      - "traefik.http.routers.ombi-rtr.rule=Host(`ombi.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.ombi-rtr.rule=Host(`request.$DOMAINNAME_HOME_SERVER`)"
       ## Middlewares
       - "traefik.http.routers.ombi-rtr.middlewares=chain-no-auth@file"
       #- "traefik.http.routers.ombi-rtr.middlewares=chain-oauth-ext@file"
