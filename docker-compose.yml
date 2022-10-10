@@ -394,6 +394,29 @@ services:
       - "traefik.http.routers.plex-rtr.service=plex-svc"
       - "traefik.http.services.plex-svc.loadbalancer.server.port=32400"
 
+  ombi:
+    <<: *common-keys-media
+    image: lscr.io/linuxserver/ombi:latest
+    container_name: ombi
+    ports:
+      - "3579:3579"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/ombi:/config
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.ombi-rtr.entrypoints=https"
+      - "traefik.http.routers.ombi-rtr.rule=Host(`ombi.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.ombi-rtr.middlewares=chain-no-auth@file"
+      #- "traefik.http.routers.ombi-rtr.middlewares=chain-oauth-ext@file"
+      ## HTTP Services
+      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
+      - "traefik.http.services.ombi-svc.loadbalancer.server.port=3579"
+
   radarr:
     <<: *common-keys-media
     image: lscr.io/linuxserver/radarr:latest
@@ -477,29 +500,6 @@ services:
       ## HTTP Services
       - "traefik.http.routers.jackett-rtr.service=jackett-svc"
       - "traefik.http.services.jackett-svc.loadbalancer.server.port=9117"
-
-  ombi:
-    <<: *common-keys-media
-    image: lscr.io/linuxserver/ombi:latest
-    container_name: ombi
-    ports:
-      - "3579:3579"
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/ombi:/config
-    environment:
-      <<: *default-tz-puid-pgid
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers Auth
-      - "traefik.http.routers.ombi-rtr.entrypoints=https"
-      - "traefik.http.routers.ombi-rtr.rule=Host(`ombi.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.ombi-rtr.middlewares=chain-basic-auth@file"
-      #- "traefik.http.routers.ombi-rtr.middlewares=chain-oauth-ext@file"
-      ## HTTP Services
-      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
-      - "traefik.http.services.ombi-svc.loadbalancer.server.port=3579"
 
   # Glances - System Information
   glances:
