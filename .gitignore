@@ -1,0 +1,5 @@
+db
+logs
+secrets
+appdata
+!appdata/traefik2/rules
