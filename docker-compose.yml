@@ -571,28 +571,6 @@ services:
       - "traefik.http.routers.glances-rtr.service=glances-svc"
       - "traefik.http.services.glances-svc.loadbalancer.server.port=61208"
 
-  filebot:
-    <<: *common-keys-core # See EXTENSION FIELDS at the top
-    image: rednoah/filebot
-    container_name: filebot
-    networks:
-      - t2_proxy
-    ports:
-      - "$FILEBOT_PORT:5452"
-    volumes:
-      - $DOCKERDIR/appdata/filebot:/app/data
-      - $STORAGEDIR/data:/data
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.filebot-rtr.entrypoints=https"
-      - "traefik.http.routers.filebot-rtr.rule=Host(`filebot.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.filebot-rtr.middlewares=chain-oauth@file"
-      ## HTTP Services
-      - "traefik.http.routers.filebot-rtr.service=filebot-svc"
-      - "traefik.http.services.filebot-svc.loadbalancer.server.port=5452"
-        
   # Uptime Kuma - Status Page & Monitoring Server
   uptime-kuma:
     <<: *common-keys-core # See EXTENSION FIELDS at the top
