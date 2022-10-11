@@ -1,0 +1,53 @@
+
+  wiki-db:
+    <<: *common-keys-core
+    image: postgres:11-alpine
+    container_name: wiki-db
+    #ports:
+    #  - "$POSTGRES_PORT:5432"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: $WIKI_DB_NAME
+      POSTGRES_USER: $WIKI_DB_USER
+      POSTGRES_PASSWORD: $WIKI_DB_PASSWORD
+
+  wiki:
+    <<: *common-keys-core
+    image: ghcr.io/requarks/wiki:2
+    depends_on:
+      - wiki-db
+    container_name: wiki
+    ports:
+      - "$WIKI_PORT:3000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/postgres:/config
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: wiki-db
+      DB_PORT: $POSTGRES_PORT
+      DB_USER: $WIKI_DB_USER
+      DB_NAME: $WIKI_DB_NAME
+      DB_PASS: $WIKI_DB_PASSWORD
+    volumes:
+      - wiki:/wiki
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.wiki-rtr.entrypoints=https"
+      - "traefik.http.routers.wiki-rtr.rule=Host(`wiki.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.wiki-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.wiki-rtr.service=wiki-svc"
+      - "traefik.http.services.wiki-svc.loadbalancer.server.port=3000"
+
+volumes:
+  wiki:
+    driver: local
+    driver_opts:
+      type: 'none'
+      o: 'bind'
+      device: '$DOCKERDIR/db/wiki-data'
