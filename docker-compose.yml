@@ -408,30 +408,32 @@ services:
       - "traefik.http.routers.plex-rtr.service=plex-svc"
       - "traefik.http.services.plex-svc.loadbalancer.server.port=32400"
 
-  kitana:
+  tautulli:
     <<: *common-keys-media
-    image: pannal/kitana:latest
-    container_name: kitana
+    image: ghcr.io/tautulli/tautulli
+    container_name: tautulli
     networks:
       - t2_proxy
     ports:
-      - "31337:31337"
+      - "8181:8181"
+    links:
+      - plex
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/kitana:/config
+      - $DOCKERDIR/appdata/tatulli:/config
     environment:
       <<: *default-tz-puid-pgid
     labels:
       - "traefik.enable=true"
       ## HTTP Routers Auth
-      - "traefik.http.routers.kitana-rtr.entrypoints=https"
-      - "traefik.http.routers.kitana-rtr.rule=Host(`kitana.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.tatulli-rtr.entrypoints=https"
+      - "traefik.http.routers.tatulli-rtr.rule=Host(`tatulli.$DOMAINNAME_HOME_SERVER`)"
       ## Middlewares
-      - "traefik.http.routers.kitana-rtr.middlewares=chain-oauth@file"
-      #- "traefik.http.routers.kitana-rtr.middlewares=chain-oauth-ext@file"
+      - "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth@file"
+      #- "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth-ext@file"
       ## HTTP Services
-      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
-      - "traefik.http.services.ombi-svc.loadbalancer.server.port=31337"
+      - "traefik.http.routers.tatulli-rtr.service=tatulli-svc"
+      - "traefik.http.services.tatulli-svc.loadbalancer.server.port=8181"
 
   ombi:
     <<: *common-keys-media
