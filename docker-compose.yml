@@ -195,7 +195,7 @@ services:
       TRANSMISSION_SPEED_LIMIT_DOWN_ENABLED: "false"
       TRANSMISSION_SPEED_LIMIT_UP: 15000
       TRANSMISSION_SPEED_LIMIT_UP_ENABLED: "false"
-      TRANSMISSION_INCOMPLETE_DIR: /data/downloads/torrents/incomplete
+      TRANSMISSION_INCOMPLETE_DIR: /data/torrents/incomplete
       TRANSMISSION_INCOMPLETE_DIR_ENABLED: "true"
       TRANSMISSION_DOWNLOAD_DIR: /data/torrents
       LOG_TO_STDOUT: "true"
