@@ -391,7 +391,7 @@ services:
   # Prowlarr - indexer
   prowlarr:
     <<: *common-keys-media
-    image: lscr.io/linuxserver/prowlarr:latest
+    image: lscr.io/linuxserver/prowlarr:develop
     container_name: prowlarr
     ports:
       - "$PROWLARR_PORT:9696"
