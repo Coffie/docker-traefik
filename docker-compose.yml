@@ -542,17 +542,17 @@ services:
       - "traefik.http.routers.mealie-rtr.service=mealie-svc"
       - "traefik.http.services.mealie-svc.loadbalancer.server.port=9000"
 
-  web_recipes:
-    restart: always
-    image: vabene1111/recipes
-    env_file:
-      - ./.env
-    volumes:
-      - staticfiles:/opt/recipes/staticfiles
-      - nginx_config:/opt/recipes/nginx/conf.d
-      - ./mediafiles:/opt/recipes/mediafiles
-    depends_on:
-      - db_recipes
+    # web_recipes:
+    #   restart: always
+    #   image: vabene1111/recipes
+    #   env_file:
+    #     - ./.env
+    #   volumes:
+    #     - staticfiles:/opt/recipes/staticfiles
+    #     - nginx_config:/opt/recipes/nginx/conf.d
+    #     - ./mediafiles:/opt/recipes/mediafiles
+    #   depends_on:
+    #     - db_recipes
 
   # Monitoring & tools
   # Glances - System Information
