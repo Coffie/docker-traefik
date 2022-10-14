@@ -107,8 +107,6 @@ services:
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.delayBeforeCheck=90 # To delay DNS check and reduce LE hitrate
-    networks:
-      - t2_proxy
     ports:
       - target: 80
         published: 80
@@ -164,12 +162,191 @@ services:
       #- "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file"
       - "traefik.http.routers.traefik-rtr.middlewares=middlewares-oauth@file"
 
+  # Oauth - SSO with google account
+  oauth:
+    <<: *common-keys-apps
+    container_name: oauth
+    image: thomseddon/traefik-forward-auth:latest
+    environment:
+      - PROVIDERS_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID
+      - PROVIDERS_GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET
+      - SECRET=$OAUTH_RANDOM
+      - COOKIE_DOMAIN=$DOMAINNAME_HOME_SERVER
+      - INSECURE_COOKIE=false
+      - AUTH_HOST=oauth.$DOMAINNAME_HOME_SERVER
+      - URL_PATH=/_oauth
+      - LOG_LEVEL=warn # set to trace while testing bypass rules
+      - LOG_FORMAT=text
+      - LIFETIME=86400
+      - DEFAULT_ACTION=auth
+      - DEFAULT_PROVIDER=google
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/oauth:/config
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.oauth-rtr.tls=true"
+      - "traefik.http.routers.oauth-rtr.entrypoints=https"
+      - "traefik.http.routers.oauth-rtr.rule=Host(`oauth.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.oauth-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.oauth-rtr.service=oauth-svc"
+      - "traefik.http.services.oauth-svc.loadbalancer.server.port=4181"
+
+  # Heimdall - dashboard
+  heimdall:
+    <<: *common-keys-core
+    image: lscr.io/linuxserver/heimdall
+    container_name: heimdall
+    volumes:
+      - $DOCKERDIR/appdata/heimdall:/config
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.heimdall-rtr.entrypoints=https"
+      - "traefik.http.routers.heimdall-rtr.rule=Host(`$DOMAINNAME_HOME_SERVER`,`www.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.heimdall-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.heimdall-rtr.service=heimdall-svc"
+      - "traefik.http.services.heimdall-svc.loadbalancer.server.port=80"
+
+  # Databases
+  # Postgres
+  postgres:
+    <<: *common-keys-core
+    image: postgres:14.1-alpine
+    container_name: postgres
+    ports:
+      - "$POSTGRES_PORT:5432"
+    volumes:
+      - $DBDIR/postgresql/data:/var/lib/postgresql/data
+      - $DOCKERDIR/scripts/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
+    environment:
+      <<: *default-tz-puid-pgid
+      POSTGRES_USER: "$POSTGRES_USER"
+      POSTGRES_PASSWORD: "$POSTGRES_PASSWORD"
+        
+  # Media
+  # Plex - media server
+  plex:
+    <<: *common-keys-media
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    ports:
+      - "32400:32400"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/plex:/config
+      - $STORAGEDIR/data/media:/data/media
+      - $STORAGEDIR/transcode:/transcode
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.plex-rtr.entrypoints=https"
+      - "traefik.http.routers.plex-rtr.rule=Host(`plex.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.plex-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.plex-rtr.service=plex-svc"
+      - "traefik.http.services.plex-svc.loadbalancer.server.port=32400"
+
+  # Ombi - Request handler plex
+  ombi:
+    <<: *common-keys-media
+    image: lscr.io/linuxserver/ombi:latest
+    container_name: ombi
+    ports:
+      - "3579:3579"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/ombi:/config
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      - traefik.docker.network=t2_proxy
+      - traefik.http.middlewares.ombi-rtr.headers.SSLRedirect=true
+      - traefik.http.middlewares.ombi-rtr.headers.STSSeconds=315360000
+      - traefik.http.middlewares.ombi-rtr.headers.browserXSSFilter=true
+      - traefik.http.middlewares.ombi-rtr.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.ombi-rtr.headers.SSLHost=
+      - traefik.http.middlewares.ombi-rtr.headers.STSIncludeSubdomains=true
+      - traefik.http.middlewares.ombi-rtr.headers.STSPreload=true
+      - traefik.http.middlewares.ombi-rtr.headers.frameDeny=true
+      ## HTTP Routers Auth
+      - "traefik.http.routers.ombi-rtr.entrypoints=https"
+      - "traefik.http.routers.ombi-rtr.rule=Host(`request.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.ombi-rtr.middlewares=chain-no-auth@file"
+      #- "traefik.http.routers.ombi-rtr.middlewares=chain-oauth-ext@file"
+      ## HTTP Services
+      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
+      - "traefik.http.services.ombi-svc.loadbalancer.server.port=3579"
+
+
+  # Tautulli - plex statistics
+  tautulli:
+    <<: *common-keys-media
+    image: ghcr.io/tautulli/tautulli
+    container_name: tautulli
+    ports:
+      - "8181:8181"
+    links:
+      - plex
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - $DOCKERDIR/appdata/tatulli:/config
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.tatulli-rtr.entrypoints=https"
+      - "traefik.http.routers.tatulli-rtr.rule=Host(`tatulli.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth@file"
+      #- "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth-ext@file"
+      ## HTTP Services
+      - "traefik.http.routers.tatulli-rtr.service=tatulli-svc"
+      - "traefik.http.services.tatulli-svc.loadbalancer.server.port=8181"
+
+  # Download clients
+  # nzbget - Binary newsgrabber (NZB downloader)
+  nzbget:
+    <<: *common-keys-apps # See EXTENSION FIELDS at the top
+    image: lscr.io/linuxserver/nzbget
+    container_name: nzbget
+    ports:
+      - "$NZBGET_PORT:6789"
+    volumes:
+      - $DOCKERDIR/appdata/nzbget:/config
+      - $STORAGEDIR/data/usenet:/data/usenet
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers Auth
+      - "traefik.http.routers.nzbget-rtr.entrypoints=https"
+      - "traefik.http.routers.nzbget-rtr.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.nzbget-rtr.middlewares=chain-no-auth@file"
+      ## HTTP Services
+      - "traefik.http.routers.nzbget-rtr.service=nzbget-svc"
+      - "traefik.http.services.nzbget-svc.loadbalancer.server.port=6789"
+
+  # Transmission - torrent client
+  # todo: use client with vpn
   transmission:
     <<: *common-keys-apps
     image: lscr.io/linuxserver/transmission:latest
     container_name: transmission
-    networks:
-      - t2_proxy
     ports:
       - "9091:9091"
       - "51413:51413"
@@ -209,260 +386,49 @@ services:
       ## HTTP Services
       - "traefik.http.routers.transmission-rtr.service=transmission-svc"
       - "traefik.http.services.transmission-svc.loadbalancer.server.port=9091"
-  # nzbget - Binary newsgrabber (NZB downloader)
-  nzbget:
-    <<: *common-keys-apps # See EXTENSION FIELDS at the top
-    image: lscr.io/linuxserver/nzbget
-    container_name: nzbget
-    networks:
-      - t2_proxy
-    ports:
-      - "$NZBGET_PORT:6789"
-    volumes:
-      - $DOCKERDIR/appdata/nzbget:/config
-      - $STORAGEDIR/data/usenet:/data/usenet
-    environment:
-      <<: *default-tz-puid-pgid
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers Auth
-      - "traefik.http.routers.nzbget-rtr.entrypoints=https"
-      - "traefik.http.routers.nzbget-rtr.rule=Host(`nzbget.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.nzbget-rtr.middlewares=chain-no-auth@file"
-      ## HTTP Services
-      - "traefik.http.routers.nzbget-rtr.service=nzbget-svc"
-      - "traefik.http.services.nzbget-svc.loadbalancer.server.port=6789"
 
-  oauth:
-    <<: *common-keys-apps
-    container_name: oauth
-    image: thomseddon/traefik-forward-auth:latest
-    networks:
-      - t2_proxy
-    environment:
-      - PROVIDERS_GOOGLE_CLIENT_ID=$OAUTH_CLIENT_ID
-      - PROVIDERS_GOOGLE_CLIENT_SECRET=$OAUTH_CLIENT_SECRET
-      - SECRET=$OAUTH_RANDOM
-      - COOKIE_DOMAIN=$DOMAINNAME_HOME_SERVER
-      - INSECURE_COOKIE=false
-      - AUTH_HOST=oauth.$DOMAINNAME_HOME_SERVER
-      - URL_PATH=/_oauth
-      - LOG_LEVEL=warn # set to trace while testing bypass rules
-      - LOG_FORMAT=text
-      - LIFETIME=86400
-      - DEFAULT_ACTION=auth
-      - DEFAULT_PROVIDER=google
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/oauth:/config
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.oauth-rtr.tls=true"
-      - "traefik.http.routers.oauth-rtr.entrypoints=https"
-      - "traefik.http.routers.oauth-rtr.rule=Host(`oauth.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.oauth-rtr.middlewares=chain-oauth@file"
-      ## HTTP Services
-      - "traefik.http.routers.oauth-rtr.service=oauth-svc"
-      - "traefik.http.services.oauth-svc.loadbalancer.server.port=4181"
-
-  oauth-ext:
-    <<: *common-keys-apps
-    container_name: oauth-ext
-    image: thomseddon/traefik-forward-auth:latest
-    networks:
-      - t2_proxy
-    ports:
-      - "4182:4181"
-    environment:
-      - PROVIDERS_GOOGLE_CLIENT_ID=$OAUTH_EXT_CLIENT_ID
-      - PROVIDERS_GOOGLE_CLIENT_SECRET=$OAUTH_EXT_CLIENT_SECRET
-      - SECRET=$OAUTH_EXT_RANDOM
-      - COOKIE_DOMAIN=$DOMAINNAME_HOME_SERVER
-      - INSECURE_COOKIE=false
-      - AUTH_HOST=oauth-ext.$DOMAINNAME_HOME_SERVER
-      - URL_PATH=/_oauth
-      - LOG_LEVEL=warn # set to trace while testing bypass rules
-      - LOG_FORMAT=text
-      - LIFETIME=86400
-      - DEFAULT_ACTION=auth
-      - DEFAULT_PROVIDER=google
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/oauth-ext:/config
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.oauth-ext-rtr.tls=true"
-      - "traefik.http.routers.oauth-ext-rtr.entrypoints=https"
-      - "traefik.http.routers.oauth-ext-rtr.rule=Host(`oauth.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.oauth-ext-rtr.middlewares=chain-oauth-ext@file"
-      ## HTTP Services
-      - "traefik.http.routers.oauth-ext-rtr.service=oauth-ext-svc"
-      - "traefik.http.services.oauth-ext-svc.loadbalancer.server.port=4181"
-
-  heimdall:
-    <<: *common-keys-core
-    image: lscr.io/linuxserver/heimdall
-    container_name: heimdall
-    networks:
-      - t2_proxy
-    volumes:
-      - $DOCKERDIR/appdata/heimdall:/config
-    environment:
-      <<: *default-tz-puid-pgid
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.heimdall-rtr.entrypoints=https"
-      - "traefik.http.routers.heimdall-rtr.rule=Host(`$DOMAINNAME_HOME_SERVER`,`www.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.heimdall-rtr.middlewares=chain-oauth@file"
-      ## HTTP Services
-      - "traefik.http.routers.heimdall-rtr.service=heimdall-svc"
-      - "traefik.http.services.heimdall-svc.loadbalancer.server.port=80"
-
-  mealie:
-    <<: *common-keys-core
-    container_name: mealie
-    image: hkotel/mealie:latest
-    networks:
-      - t2_proxy
-    ports:
-      - 9000:80
-    environment:
-      <<: *default-tz-puid-pgid
-      #db_username: $MEALIE_DB_USER
-      #db_password: $MEALIE_DB_PASSWORD
-      #db_host: mongo
-      #db_port: $MONGODB_PORT
-      #DB_ENGINE: mongodb
-    volumes:
-      - $DOCKERDIR/appdata/mealie:/app/data/
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers
-      - "traefik.http.routers.mealie-rtr.entrypoints=https"
-      - "traefik.http.routers.mealie-rtr.rule=Host(`mealie.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.mealie-rtr.middlewares=chain-oauth@file"
-      ## HTTP Services
-      - "traefik.http.routers.mealie-rtr.service=mealie-svc"
-      - "traefik.http.services.mealie-svc.loadbalancer.server.port=9000"
-
-        #mongo:
-        #  <<: *common-keys-core
-        #  image: mongo
-        #  container_name: mealie-mongo
-        #  volumes:
-        #    - $DOCKERDIR/appdata/mongo:/data/db
-        #  environment:
-        #    MONGO_INITDB_ROOT_USERNAME: $MEALIE_DB_USER
-        #    MONGO_INITDB_ROOT_PASSWORD: $MEALIE_DB_PASSWORD
-
-  plex:
+  # *arr apps
+  # Prowlarr - indexer
+  prowlarr:
     <<: *common-keys-media
-    image: lscr.io/linuxserver/plex:latest
-    container_name: plex
-    networks:
-      - t2_proxy
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
     ports:
-      - "32400:32400"
+      - "$PROWLARR_PORT:9696"
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/plex:/config
-      - $STORAGEDIR/data/media:/data/media
-      - $STORAGEDIR/transcode:/transcode
+      - $DOCKERDIR/appdata/prowlarr:/config
     environment:
       <<: *default-tz-puid-pgid
     labels:
       - "traefik.enable=true"
+      ## HTTP Routers Auth Bypass
+      - "traefik.http.routers.prowlarr-rtr-bypass.entrypoints=https"
+      - "traefik.http.routers.prowlarr-rtr-bypass.rule=Host(`prowlarr.$DOMAINNAME_HOME_SERVER`) && (Headers(`X-Api-Key`, `$PROWLARR_API_KEY`) || Query(`apikey`, `$PROWLARR_API_KEY`))"
+      - "traefik.http.routers.prowlarr-rtr-bypass.priority=100"
       ## HTTP Routers Auth
-      - "traefik.http.routers.plex-rtr.entrypoints=https"
-      - "traefik.http.routers.plex-rtr.rule=Host(`plex.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.prowlarr-rtr.entrypoints=https"
+      - "traefik.http.routers.prowlarr-rtr.rule=Host(`prowlarr.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.prowlarr-rtr.priority=99"
       ## Middlewares
-      - "traefik.http.routers.plex-rtr.middlewares=chain-oauth@file"
+      - "traefik.http.routers.prowlarr-rtr-bypass.middlewares=chain-no-auth@file"
+      - "traefik.http.routers.prowlarr-rtr.middlewares=chain-oauth@file"
       ## HTTP Services
-      - "traefik.http.routers.plex-rtr.service=plex-svc"
-      - "traefik.http.services.plex-svc.loadbalancer.server.port=32400"
+      - "traefik.http.routers.prowlarr-rtr.service=prowlarr-svc"
+      - "traefik.http.routers.prowlarr-rtr-bypass.service=prowlarr-svc"
+      - "traefik.http.services.prowlarr-svc.loadbalancer.server.port=9696"
 
-  tautulli:
-    <<: *common-keys-media
-    image: ghcr.io/tautulli/tautulli
-    container_name: tautulli
-    networks:
-      - t2_proxy
-    ports:
-      - "8181:8181"
-    links:
-      - plex
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/tatulli:/config
-    environment:
-      <<: *default-tz-puid-pgid
-    labels:
-      - "traefik.enable=true"
-      ## HTTP Routers Auth
-      - "traefik.http.routers.tatulli-rtr.entrypoints=https"
-      - "traefik.http.routers.tatulli-rtr.rule=Host(`tatulli.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth@file"
-      #- "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth-ext@file"
-      ## HTTP Services
-      - "traefik.http.routers.tatulli-rtr.service=tatulli-svc"
-      - "traefik.http.services.tatulli-svc.loadbalancer.server.port=8181"
-
-  ombi:
-    <<: *common-keys-media
-    image: lscr.io/linuxserver/ombi:latest
-    container_name: ombi
-    networks:
-      - t2_proxy
-    ports:
-      - "3579:3579"
-    volumes:
-      - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/ombi:/config
-    environment:
-      <<: *default-tz-puid-pgid
-    labels:
-      - "traefik.enable=true"
-      - traefik.docker.network=t2_proxy
-      - traefik.http.middlewares.ombi-rtr.headers.SSLRedirect=true
-      - traefik.http.middlewares.ombi-rtr.headers.STSSeconds=315360000
-      - traefik.http.middlewares.ombi-rtr.headers.browserXSSFilter=true
-      - traefik.http.middlewares.ombi-rtr.headers.contentTypeNosniff=true
-      - traefik.http.middlewares.ombi-rtr.headers.SSLHost=
-      - traefik.http.middlewares.ombi-rtr.headers.STSIncludeSubdomains=true
-      - traefik.http.middlewares.ombi-rtr.headers.STSPreload=true
-      - traefik.http.middlewares.ombi-rtr.headers.frameDeny=true
-      ## HTTP Routers Auth
-      - "traefik.http.routers.ombi-rtr.entrypoints=https"
-      - "traefik.http.routers.ombi-rtr.rule=Host(`request.$DOMAINNAME_HOME_SERVER`)"
-      ## Middlewares
-      - "traefik.http.routers.ombi-rtr.middlewares=chain-no-auth@file"
-      #- "traefik.http.routers.ombi-rtr.middlewares=chain-oauth-ext@file"
-      ## HTTP Services
-      - "traefik.http.routers.ombi-rtr.service=ombi-svc"
-      - "traefik.http.services.ombi-svc.loadbalancer.server.port=3579"
-
+  # Radarr - Movie tracker
   radarr:
     <<: *common-keys-media
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
-    networks:
-      - t2_proxy
     ports:
       - "$RADARR_PORT:7878"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - $DOCKERDIR/appdata/radarr:/config
       - $STORAGEDIR/data:/data
-      - /mnt/ssd/temp1tb:/imports
     environment:
       <<: *default-tz-puid-pgid
     labels:
@@ -483,19 +449,17 @@ services:
       - "traefik.http.routers.radarr-rtr-bypass.service=radarr-svc"
       - "traefik.http.services.radarr-svc.loadbalancer.server.port=7878"
 
+  # Sonarr - Tv tracker
   sonarr:
     <<: *common-keys-media
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
-    networks:
-      - t2_proxy
     ports:
       - "$SONARR_PORT:8989"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - $DOCKERDIR/appdata/sonarr:/config
       - $STORAGEDIR/data:/data
-      - /mnt/ssd/temp1tb:/imports
     environment:
       <<: *default-tz-puid-pgid
     labels:
@@ -516,12 +480,11 @@ services:
       - "traefik.http.routers.sonarr-rtr-bypass.service=sonarr-svc"
       - "traefik.http.services.sonarr-svc.loadbalancer.server.port=8989"
 
+  # Jackett - indexer
   jackett:
     <<: *common-keys-media
     image: lscr.io/linuxserver/jackett
     container_name: jackett
-    networks:
-      - t2_proxy
     ports:
       - "9117:9117"
     volumes:
@@ -540,13 +503,63 @@ services:
       - "traefik.http.routers.jackett-rtr.service=jackett-svc"
       - "traefik.http.services.jackett-svc.loadbalancer.server.port=9117"
 
+
+  # Sites
+  # Mealie - Recipe manager & meal planner
+  mealie:
+    <<: *common-keys-core
+    container_name: mealie
+    image: hkotel/mealie:latest
+    ports:
+      - 9000:80
+    environment:
+      <<: *default-tz-puid-pgid
+      DB_ENGINE: postgres
+      POSTGRES_USER: $MEALIE_DB_USER
+      POSTGRES_PASSWORD: $MEALIE_DB_PASSWORD
+      POSTGRES_SERVER: postgres
+      POSTGRES_PORT: $POSTGRES_PORT
+      POSTGRES_DB_NAME: $MEALIE_DB_NAME
+      # Default Recipe Settings
+      RECIPE_PUBLIC: 'true'
+      RECIPE_SHOW_NUTRITION: 'true'
+      RECIPE_SHOW_ASSETS: 'true'
+      RECIPE_LANDSCAPE_VIEW: 'true'
+      RECIPE_DISABLE_COMMENTS: 'false'
+      RECIPE_DISABLE_AMOUNT: 'false'
+    depends_on:
+      - postgres
+    volumes:
+      - $DOCKERDIR/appdata/mealie:/app/data/
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.mealie-rtr.entrypoints=https"
+      - "traefik.http.routers.mealie-rtr.rule=Host(`mealie.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.mealie-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.mealie-rtr.service=mealie-svc"
+      - "traefik.http.services.mealie-svc.loadbalancer.server.port=9000"
+
+  web_recipes:
+    restart: always
+    image: vabene1111/recipes
+    env_file:
+      - ./.env
+    volumes:
+      - staticfiles:/opt/recipes/staticfiles
+      - nginx_config:/opt/recipes/nginx/conf.d
+      - ./mediafiles:/opt/recipes/mediafiles
+    depends_on:
+      - db_recipes
+
+  # Monitoring & tools
   # Glances - System Information
   glances:
     <<: *common-keys-apps # See EXTENSION FIELDS at the top
     image: nicolargo/glances:latest
     container_name: glances
-    networks:
-      - t2_proxy
     # privileged: true # Only for VM
     # network_mode: host
     ports:
@@ -576,8 +589,6 @@ services:
     <<: *common-keys-core # See EXTENSION FIELDS at the top
     image: louislam/uptime-kuma
     container_name: uptime-kuma
-    networks:
-      - t2_proxy
     ports:
       - "$KUMA_PORT:3001"
     volumes:
@@ -598,8 +609,8 @@ services:
     <<: *common-keys-apps # See EXTENSION FIELDS at the top
     image: amir20/dozzle:latest
     container_name: dozzle
-    networks:
-      - t2_proxy
+
+
     ports:
       - "8080:8080"
     environment:
@@ -618,13 +629,12 @@ services:
       ## HTTP Services
       - "traefik.http.routers.dozzle-rtr.service=dozzle-svc"
       - "traefik.http.services.dozzle-svc.loadbalancer.server.port=8080"
-        
+
+  # CF-Companion
   cf-companion:
     <<: *common-keys-core
     container_name: cf-companion
     image: tiredofit/traefik-cloudflare-companion:latest
-    networks:
-      - t2_proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
