@@ -164,7 +164,7 @@ services:
 
   # Oauth - SSO with google account
   oauth:
-    <<: *common-keys-apps
+    <<: *common-keys-core
     container_name: oauth
     image: thomseddon/traefik-forward-auth:latest
     environment:
@@ -219,13 +219,13 @@ services:
   # Postgres
   postgres:
     <<: *common-keys-core
-    image: postgres:14.1-alpine
+    image: postgres:15-alpine
     container_name: postgres
     ports:
       - "$POSTGRES_PORT:5432"
     volumes:
       - $DBDIR/postgresql/data:/var/lib/postgresql/data
-      - $DOCKERDIR/scripts/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
+      #- $DOCKERDIR/scripts/create_tables.sql:/docker-entrypoint-initdb.d/create_tables.sql
     environment:
       <<: *default-tz-puid-pgid
       POSTGRES_USER: "$POSTGRES_USER"
@@ -238,7 +238,7 @@ services:
     image: lscr.io/linuxserver/plex:latest
     container_name: plex
     ports:
-      - "32400:32400"
+      - "$PLEX_PORT:32400"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - $DOCKERDIR/appdata/plex:/config
@@ -289,7 +289,6 @@ services:
       ## HTTP Services
       - "traefik.http.routers.ombi-rtr.service=ombi-svc"
       - "traefik.http.services.ombi-svc.loadbalancer.server.port=3579"
-
 
   # Tautulli - plex statistics
   tautulli:
@@ -507,7 +506,7 @@ services:
   # Sites
   # Mealie - Recipe manager & meal planner
   mealie:
-    <<: *common-keys-core
+    <<: *common-keys-apps
     container_name: mealie
     image: hkotel/mealie:latest
     ports:
@@ -542,6 +541,26 @@ services:
       - "traefik.http.routers.mealie-rtr.service=mealie-svc"
       - "traefik.http.services.mealie-svc.loadbalancer.server.port=9000"
 
+  # Grocy - ERP for food
+  grocy:
+    <<: *common-keys-apps
+    image: lscr.io/linuxserver/grocy:latest
+    container_name: grocy
+    ports:
+      - "$GROCY_PORT:80"
+    volumes:
+      - $DOCKERDIR/appdata/grocy:/app/data/
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.grocy-rtr.entrypoints=https"
+      - "traefik.http.routers.grocy-rtr.rule=Host(`grocy.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.grocy-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.grocy-rtr.service=grocy-svc"
+      - "traefik.http.services.grocy-svc.loadbalancer.server.port=9283"
+
     # web_recipes:
     #   restart: always
     #   image: vabene1111/recipes
@@ -557,7 +576,7 @@ services:
   # Monitoring & tools
   # Glances - System Information
   glances:
-    <<: *common-keys-apps # See EXTENSION FIELDS at the top
+    <<: *common-keys-core # See EXTENSION FIELDS at the top
     image: nicolargo/glances:latest
     container_name: glances
     # privileged: true # Only for VM
@@ -606,7 +625,7 @@ services:
 
   # Dozzle - Real-time Docker Log Viewer
   dozzle:
-    <<: *common-keys-apps # See EXTENSION FIELDS at the top
+    <<: *common-keys-core # See EXTENSION FIELDS at the top
     image: amir20/dozzle:latest
     container_name: dozzle
 
