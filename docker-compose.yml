@@ -548,6 +548,8 @@ services:
     container_name: grocy
     ports:
       - "$GROCY_PORT:80"
+    environment:
+      <<: *default-tz-puid-pgid
     volumes:
       - $DOCKERDIR/appdata/grocy:/app/data/
     labels:
