@@ -556,7 +556,7 @@ services:
       - "traefik.http.routers.grocy-rtr.entrypoints=https"
       - "traefik.http.routers.grocy-rtr.rule=Host(`grocy.$DOMAINNAME_HOME_SERVER`)"
       ## Middlewares
-      - "traefik.http.routers.grocy-rtr.middlewares=chain-oauth@file"
+      - "traefik.http.routers.grocy-rtr.middlewares=chain-no-auth@file"
       ## HTTP Services
       - "traefik.http.routers.grocy-rtr.service=grocy-svc"
       - "traefik.http.services.grocy-svc.loadbalancer.server.port=9283"
