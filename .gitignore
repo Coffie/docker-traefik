@@ -1,5 +1,8 @@
+!appdata/traefik2/rules
+!appdata/homeassistant
+!appdata/grocy/data
 db
 logs
 secrets
-appdata
-!appdata/traefik2/rules
+appdata/*
+shared

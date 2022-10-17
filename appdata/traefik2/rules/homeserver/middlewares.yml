@@ -10,12 +10,7 @@ http:
         trustForwardHeader: true
         authResponseHeaders:
           - "X-Forwarded-User"
-    middlewares-oauth-ext:
-      forwardAuth:
-        address: "http://oauth:4182"
-        trustForwardHeader: true
-        authResponseHeaders:
-          - "X-Forwarded-User"
+          - "X-Forwarded-For"
     middlewares-rate-limit:
       rateLimit:
         average: 100
@@ -37,7 +32,7 @@ http:
         stsIncludeSubdomains: true
         stsPreload: true
         forceSTSHeader: true
-        customFrameOptionsValue: "allow-from https:{{env "DOMAINNAME_CLOUD_SERVER"}}" #CSP takes care of this but may be needed for organizr.
+        customFrameOptionsValue: "allow-from https:{{env "DOMAINNAME_HOME_SERVER"}}" #CSP takes care of this but may be needed for organizr.
         contentTypeNosniff: true
         browserXssFilter: true
         # sslForceHost: true # add sslHost to all of the services
