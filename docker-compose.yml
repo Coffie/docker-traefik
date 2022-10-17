@@ -10,6 +10,12 @@ networks:
     # ipam:
     #   config:
     #     - subnet: 192.168.86.0/24
+  socket_proxy:
+    name: socket_proxy
+    driver: bridge
+    # ipam:
+    #   config:
+    #     - subnet: 192.168.87.0/24
 
 ### Secrets
 # secrets:
@@ -86,8 +92,8 @@ services:
       - --accessLog.bufferingSize=100 # Configuring a buffer of 100 lines
       - --accessLog.filters.statusCodes=204-299,400-499,500-599
       - --providers.docker=true
-      - --providers.docker.endpoint=unix:///var/run/docker.sock # Use Docker Socket Proxy instead for improved security
-      # - --providers.docker.endpoint=tcp://socket-proxy:2375 # Use this instead of the previous line if you have socket proxy.
+      # - --providers.docker.endpoint=unix:///var/run/docker.sock # Use Docker Socket Proxy instead for improved security
+      - --providers.docker.endpoint=tcp://socket-proxy:2375 # Use this instead of the previous line if you have socket proxy.
       - --providers.docker.exposedByDefault=false
       - --entrypoints.https.http.tls.options=tls-opts@file
       # Add dns-cloudflare as default certresolver for all services. Also enables TLS and no need to specify on individual services
@@ -107,6 +113,9 @@ services:
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.provider=cloudflare
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.resolvers=1.1.1.1:53,1.0.0.1:53
       - --certificatesResolvers.dns-cloudflare.acme.dnsChallenge.delayBeforeCheck=90 # To delay DNS check and reduce LE hitrate
+    networks:
+      - t2_proxy
+      - socket_proxy
     ports:
       - target: 80
         published: 80
@@ -128,8 +137,7 @@ services:
       - $DOCKERDIR/appdata/traefik2/rules/homeserver:/rules
       - $DOCKERDIR/appdata/traefik2/acme/acme.json:/acme.json 
       - $DOCKERDIR/logs/homeserver/traefik:/logs
-      - $DOCKERDIR/shared:/shared
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - TZ=$TZ
       - CF_API_EMAIL=$CLOUDFLARE_EMAIL
@@ -160,7 +168,56 @@ services:
       - "traefik.http.routers.traefik-rtr.service=api@internal"
       ## Middlewares
       #- "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file"
-      - "traefik.http.routers.traefik-rtr.middlewares=middlewares-oauth@file"
+      - "traefik.http.routers.traefik-rtr.middlewares=chain-oauth@file"
+      # - "traefik.http.routers.traefik-rtr.middlewares=chain-no-auth@file" # For No Authentication
+      # - "traefik.http.routers.traefik-rtr.middlewares=chain-basic-auth@file" # For Basic HTTP Authentication
+
+  # Docker Socket Proxy - Security Enchanced Proxy for Docker Socket
+  socket-proxy:
+    <<: *common-keys-core # See EXTENSION FIELDS at the top
+    container_name: socket-proxy
+    image: tecnativa/docker-socket-proxy
+    networks:
+      - socket_proxy
+    # privileged: true # true for VM. False for unprivileged LXC container.
+    ports:
+    - "127.0.0.1:2375:2375" # Port 2375 should only ever get exposed to the internal network. When possible use this line.
+    # I use the next line instead, as I want portainer to manage multiple docker endpoints within my home network.
+    # - "2375:2375"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    environment:
+      - LOG_LEVEL=info # debug,info,notice,warning,err,crit,alert,emerg
+      ## Variables match the URL prefix (i.e. AUTH blocks access to /auth/* parts of the API, etc.).
+      # 0 to revoke access.
+      # 1 to grant access.
+      ## Granted by Default
+      - EVENTS=1
+      - PING=1
+      - VERSION=1
+      ## Revoked by Default
+      # Security critical
+      - AUTH=0
+      - SECRETS=0
+      - POST=1 # Watchtower
+      # Not always needed
+      - BUILD=0
+      - COMMIT=0
+      - CONFIGS=0
+      - CONTAINERS=1 # Traefik, portainer, etc.
+      - DISTRIBUTION=0
+      - EXEC=0
+      - IMAGES=1 # Portainer
+      - INFO=1 # Portainer
+      - NETWORKS=1 # Portainer
+      - NODES=0
+      - PLUGINS=0
+      - SERVICES=1 # Portainer
+      - SESSION=0
+      - SWARM=0
+      - SYSTEM=0
+      - TASKS=1 # Portainer
+      - VOLUMES=1 # Portainer
 
   # Oauth - SSO with google account
   oauth:
@@ -262,8 +319,8 @@ services:
     <<: *common-keys-media
     image: lscr.io/linuxserver/ombi:latest
     container_name: ombi
-    ports:
-      - "3579:3579"
+    # ports:
+    #   - "$OMBI_PORT:3579"
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - $DOCKERDIR/appdata/ombi:/config
@@ -296,25 +353,24 @@ services:
     image: ghcr.io/tautulli/tautulli
     container_name: tautulli
     ports:
-      - "8181:8181"
+      - "$TAUTULLI_PORT:8181"
     links:
       - plex
     volumes:
       - /etc/localtime:/etc/localtime:ro
-      - $DOCKERDIR/appdata/tatulli:/config
+      - $DOCKERDIR/appdata/tautulli:/config
     environment:
       <<: *default-tz-puid-pgid
     labels:
       - "traefik.enable=true"
       ## HTTP Routers Auth
-      - "traefik.http.routers.tatulli-rtr.entrypoints=https"
-      - "traefik.http.routers.tatulli-rtr.rule=Host(`tatulli.$DOMAINNAME_HOME_SERVER`)"
+      - "traefik.http.routers.tautulli-rtr.entrypoints=https"
+      - "traefik.http.routers.tautulli-rtr.rule=Host(`tautulli.$DOMAINNAME_HOME_SERVER`)"
       ## Middlewares
-      - "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth@file"
-      #- "traefik.http.routers.tatulli-rtr.middlewares=chain-oauth-ext@file"
+      - "traefik.http.routers.tautulli-rtr.middlewares=chain-oauth@file"
       ## HTTP Services
-      - "traefik.http.routers.tatulli-rtr.service=tatulli-svc"
-      - "traefik.http.services.tatulli-svc.loadbalancer.server.port=8181"
+      - "traefik.http.routers.tautulli-rtr.service=tautulli-svc"
+      - "traefik.http.services.tautulli-svc.loadbalancer.server.port=8181"
 
   # Download clients
   # nzbget - Binary newsgrabber (NZB downloader)
@@ -529,7 +585,7 @@ services:
     depends_on:
       - postgres
     volumes:
-      - $DOCKERDIR/appdata/mealie:/app/data/
+      - $DOCKERDIR/appdata/mealie:/config
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -546,12 +602,12 @@ services:
     <<: *common-keys-apps
     image: lscr.io/linuxserver/grocy:latest
     container_name: grocy
-    ports:
-      - "$GROCY_PORT:80"
+    #ports:
+    #  - "$GROCY_PORT:80"
     environment:
       <<: *default-tz-puid-pgid
     volumes:
-      - $DOCKERDIR/appdata/grocy:/app/data/
+      - $DOCKERDIR/appdata/grocy:/config
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -561,7 +617,7 @@ services:
       - "traefik.http.routers.grocy-rtr.middlewares=chain-no-auth@file"
       ## HTTP Services
       - "traefik.http.routers.grocy-rtr.service=grocy-svc"
-      - "traefik.http.services.grocy-svc.loadbalancer.server.port=9283"
+      - "traefik.http.services.grocy-svc.loadbalancer.server.port=80"
 
     # web_recipes:
     #   restart: always
@@ -576,6 +632,31 @@ services:
     #     - db_recipes
 
   # Monitoring & tools
+  # Home Assistant
+  homeassitant:
+    <<: *common-keys-core
+    container_name: homeassistant
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    ports:
+      - "8123:8123"
+    privileged: true
+    volumes:
+      - $DOCKERDIR/appdata/homeassistant:/config
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      <<: *default-tz-puid-pgid
+    labels:
+      - "traefik.enable=true"
+      ## HTTP Routers
+      - "traefik.http.routers.homeassistant-rtr.entrypoints=https"
+      - "traefik.http.routers.homeassistant-rtr.rule=Host(`home.$DOMAINNAME_HOME_SERVER`)"
+      ## Middlewares
+      - "traefik.http.routers.homeassistant-rtr.middlewares=chain-no-auth@file"
+      #- "traefik.http.routers.homeassistant-rtr.middlewares=chain-oauth@file"
+      ## HTTP Services
+      - "traefik.http.routers.homeassistant-rtr.service=homeassistant-svc"
+      - "traefik.http.services.homeassistant-svc.loadbalancer.server.port=8123"
+
   # Glances - System Information
   glances:
     <<: *common-keys-core # See EXTENSION FIELDS at the top
@@ -583,17 +664,22 @@ services:
     container_name: glances
     # privileged: true # Only for VM
     # network_mode: host
-    ports:
-      - "$GLANCES_PORT:61208"
+    networks:
+      - t2_proxy
+      - socket_proxy
+      - default
+    # ports:
+    #   - "$GLANCES_PORT:61208"
     pid: host
     volumes:
       - $DOCKERDIR/appdata/glances/glances.conf:/glances/conf/glances.conf # Use this if you want to add a glances.conf file
       - $STORAGEDIR/data/media:/data/media:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro # Use Docker Socket Proxy instead for improved security
+      # - /var/run/docker.sock:/var/run/docker.sock:ro # Use Docker Socket Proxy instead for improved security
     environment:
       # GLANCES_OPT: "-C /glances/conf/glances.conf --quiet --export influxdb"
       # GLANCES_OPT: "--export influxdb"
       GLANCES_OPT: "-w"
+      DOCKER_HOST: tcp://socket-proxy:2375
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -613,7 +699,7 @@ services:
     ports:
       - "$KUMA_PORT:3001"
     volumes:
-      - $DOCKERDIR/appdata/uptime-kuma:/app/data
+      - $DOCKERDIR/appdata/uptime-kuma:/config
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -627,19 +713,21 @@ services:
 
   # Dozzle - Real-time Docker Log Viewer
   dozzle:
-    <<: *common-keys-core # See EXTENSION FIELDS at the top
+    <<: *common-keys-apps # See EXTENSION FIELDS at the top
     image: amir20/dozzle:latest
     container_name: dozzle
-
-
+    networks:
+      - t2_proxy
+      - socket_proxy
     ports:
       - "8080:8080"
     environment:
       DOZZLE_LEVEL: info
       DOZZLE_TAILSIZE: 300
       DOZZLE_FILTER: "status=running"
-    volumes:
-     - /var/run/docker.sock:/var/run/docker.sock 
+      DOCKER_HOST: tcp://socket-proxy:2375
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock 
     labels:
       - "traefik.enable=true"
       ## HTTP Routers
@@ -656,8 +744,10 @@ services:
     <<: *common-keys-core
     container_name: cf-companion
     image: tiredofit/traefik-cloudflare-companion:latest
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket_proxy
     environment:
       - TIMEZONE=$TZ
       - TRAEFIK_VERSION=2
@@ -666,6 +756,7 @@ services:
       - DOMAIN1=$DOMAINNAME_HOME_SERVER
       - DOMAIN1_ZONE_ID=$CLOUDFLARE_ZONEID # Copy from Cloudflare Overview page
       - DOMAIN1_PROXIED=TRUE
+      - DOCKER_HOST=tcp://socket-proxy:2375
         #secrets:
         #  - cf_token
     # labels:
