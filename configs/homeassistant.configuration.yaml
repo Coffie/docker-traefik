@@ -1,0 +1,32 @@
+homeassistant:
+  name: !secret ha_name
+  latitude: !secret home_lat
+  longitude: !secret home_long
+  elevation: 2
+  unit_system: metric
+  time_zone: !secret home_tz 
+  #customize: !include customize.yaml
+  external_url: !secret baseurl
+
+config:
+
+frontend:
+
+default_config:
+
+circadian_lighting:
+
+sensor:
+  - platform: google_wifi
+
+# Text to speech
+tts:
+  - platform: google_translate
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.24.0.0/24

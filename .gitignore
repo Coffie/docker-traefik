@@ -1,8 +1,8 @@
-!appdata/traefik2/rules
-!appdata/homeassistant
-!appdata/grocy/data
-db
+# Ignore some docker appdata
+appdata/*
+# ignore logs & secrets
 logs
 secrets
-appdata/*
 shared
+
+!appdata/traefik2/rules
